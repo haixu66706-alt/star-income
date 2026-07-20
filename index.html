@@ -329,7 +329,10 @@ body {
   <!-- 每日上课时间表 -->
   <div class="card">
     <h3>📅 每日上课时间表</h3>
-    <div class="form-group"><label>日期</label><input type="date" id="scDate"></div>
+    <div class="frow">
+      <div class="form-group"><label>开始日期</label><input type="date" id="scDateStart"></div>
+      <div class="form-group"><label>结束日期</label><input type="date" id="scDateEnd"></div>
+    </div>
     <div class="frow">
       <div class="form-group"><label>开始时间</label><input type="time" id="scStart" value="14:00"></div>
       <div class="form-group"><label>结束时间</label><input type="time" id="scEnd" value="16:00"></div>
@@ -337,6 +340,10 @@ body {
     <div class="frow">
       <div class="form-group"><label>科目 / 学生</label><input type="text" id="scSubject" placeholder="例: 数学·小明"></div>
       <div class="form-group"><label>节数</label><input type="number" id="scCount" placeholder="例: 2" step="1" min="1"></div>
+    </div>
+    <div class="frow">
+      <div class="form-group"><label>上课学生姓名</label><input type="text" id="scStudentName" placeholder="例: 小明、小红"></div>
+      <div class="form-group"><label>上课人数</label><input type="number" id="scStudentCount" placeholder="例: 3" step="1" min="1"></div>
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="addSched()">📅 添加课程</button>
@@ -346,7 +353,7 @@ body {
     <!-- 表格 -->
     <div style="margin-top:.6rem">
       <table class="tbl" id="schedTable">
-        <thead><tr><th>日期</th><th>时间</th><th>科目/学生</th><th style="text-align:right">节数</th><th class="del"></th></tr></thead>
+        <thead><tr><th>日期</th><th>时间</th><th>科目</th><th>学生</th><th style="text-align:right">人数</th><th style="text-align:right">节数</th><th class="del"></th></tr></thead>
         <tbody id="schedBody"></tbody>
       </table>
     </div>
@@ -427,28 +434,48 @@ function toast(msg) {
 
 // ======================== 上课时间表 ========================
 function addSched() {
-  var d = document.getElementById('scDate').value;
+  var startDate = document.getElementById('scDateStart').value;
+  var endDate = document.getElementById('scDateEnd').value;
   var start = document.getElementById('scStart').value;
   var end = document.getElementById('scEnd').value;
   var t = start + '-' + end;
   var subj = document.getElementById('scSubject').value.trim();
   var c = parseInt(document.getElementById('scCount').value);
+  var studentName = document.getElementById('scStudentName').value.trim();
+  var studentCount = parseInt(document.getElementById('scStudentCount').value) || 0;
 
-  if (!d) return toast('请选日期');
-  if (!start || !end) return toast('请选择开始和结束时间');
+  if (!startDate) return toast('请选开始日期');
+  if (!endDate) return toast('请选结束日期');
+  if (endDate < startDate) return toast('结束日期必须晚于开始日期');
+  if (!start || !end) return toast('请选择上课时间');
   if (end <= start) return toast('结束时间必须晚于开始时间');
   if (!subj) return toast('请填科目/学生');
   if (!c || c <= 0) return toast('请填节数');
 
+  // 生成日期范围
+  var dates = [];
+  var cur = new Date(startDate + 'T00:00:00');
+  var endD = new Date(endDate + 'T00:00:00');
+  while (cur <= endD) {
+    dates.push(cur.toISOString().split('T')[0]);
+    cur.setDate(cur.getDate() + 1);
+  }
+
   var a = lS();
-  a.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), date:d, time:t, subject:subj, count:c });
+  dates.forEach(function(d){
+    a.push({
+      id: Date.now().toString(36)+Math.random().toString(36).slice(2,6) + '_' + d,
+      date: d,
+      time: t,
+      subject: subj,
+      count: c,
+      studentName: studentName,
+      studentCount: studentCount
+    });
+  });
   sS(a);
-  document.getElementById('scStart').value = '14:00';
-  document.getElementById('scEnd').value = '16:00';
-  document.getElementById('scSubject').value = '';
-  document.getElementById('scCount').value = '';
-  renderScheds();
-  toast('✨ 课程已添加');
+
+  toast('✨ 已添加 ' + dates.length + ' 天课程');
 }
 
 function rmSched(id) {
@@ -479,8 +506,8 @@ function batchToIncome() {
       date: s.date,
       lessons: s.count,
       rate: rate,
-      students: 1,
-      note: s.subject,
+      students: s.studentCount || 1,
+      note: s.studentName ? s.subject + '｜' + s.studentName : s.subject,
       ts: new Date().toISOString()
     });
     existingDates.add(key);
@@ -497,7 +524,7 @@ function renderScheds() {
   var all = lS().sort(function(a,b){ return b.date.localeCompare(a.date) || a.time.localeCompare(b.time); });
   var tb = document.getElementById('schedBody');
   if (!all.length) {
-    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--text-dim)"><div class="star-mascot-sm" style="margin-bottom:.4rem">' + starSvgSmall() + '</div>还没有课程安排~</td></tr>';
+    tb.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--text-dim)"><div class="star-mascot-sm" style="margin-bottom:.4rem">' + starSvgSmall() + '</div>还没有课程安排~</td></tr>';
     document.getElementById('schedStats').style.display = 'none';
     return;
   }
@@ -507,6 +534,8 @@ function renderScheds() {
       '<td>' + (dt.getMonth()+1) + '/' + dt.getDate() + '</td>' +
       '<td>' + he(s.time) + '</td>' +
       '<td>' + he(s.subject) + '</td>' +
+      '<td>' + he(s.studentName || '-') + '</td>' +
+      '<td style="text-align:right">' + (s.studentCount || '-') + '</td>' +
       '<td style="text-align:right;font-weight:600">' + s.count + '节</td>' +
       '<td class="del" onclick="rmSched(\'' + s.id + '\')" role="button" tabindex="0" aria-label="删除课程">✕</td>' +
     '</tr>';
@@ -865,7 +894,8 @@ function starSvgSmall() {
 
 // ======================== 初始化 ========================
 document.getElementById('inDate').value = new Date().toISOString().split('T')[0];
-document.getElementById('scDate').value = new Date().toISOString().split('T')[0];
+document.getElementById('scDateEnd').value = new Date().toISOString().split('T')[0];
+document.getElementById('scDateStart').value = new Date().toISOString().split('T')[0];
 var sr = localStorage.getItem('kitty_defaultRate');
 document.getElementById('inRate').value = sr || '150';
 document.getElementById('inRate').addEventListener('change', function(){ localStorage.setItem('kitty_defaultRate', this.value); });
